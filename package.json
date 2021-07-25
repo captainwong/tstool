@@ -1,0 +1,25 @@
+{
+  "name": "tstool",
+  "version": "1.0.0",
+  "description": "A node tool to translate Qt ts file to other languages using google translate api.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/captainwong/tstool.git"
+  },
+  "keywords": [
+    "Qt",
+    "ts",
+    "translate",
+    "google"
+  ],
+  "author": "captainwong",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/captainwong/tstool/issues"
+  },
+  "homepage": "https://github.com/captainwong/tstool#readme"
+}
