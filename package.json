@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "description": "A node tool to translate Qt ts file to other languages using google translate api.",
   "main": "index.js",
+  "bin": {
+    "tstool": "index.js"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
   },
   "repository": {
     "type": "git",
@@ -21,5 +25,10 @@
   "bugs": {
     "url": "https://github.com/captainwong/tstool/issues"
   },
-  "homepage": "https://github.com/captainwong/tstool#readme"
+  "homepage": "https://github.com/captainwong/tstool#readme",
+  "dependencies": {
+    "commander": "^8.0.0",
+    "fs": "^0.0.1-security",
+    "xmldom": "^0.6.0"
+  }
 }
