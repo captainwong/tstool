@@ -20,7 +20,7 @@ const dst_langs = {
 ```
 
 ## 用法
-`npm index.js -z 中文ts文件 -d 目标语言列表`
+`node index.js -z 中文ts文件 -d 目标语言列表`
 
 ## 示例
 
