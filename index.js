@@ -6,12 +6,25 @@ const axios = require("axios");
 const xmldom = require('xmldom').DOMParser;
 var XMLSerializer = require('xmldom').XMLSerializer;
 
-const { Command } = require('commander');
+const { Command, Option } = require('commander');
 const program = new Command();
+
+
+const dst_langs = {
+    'zh_TW': 'cht', // 繁体中文
+    'ar': 'ara',    // 阿拉伯语
+    'de': 'de',     // 德语
+    'es': 'spa',    // 西班牙语
+    'fr': 'fra',    // 法语
+    'it': 'it',     // 意大利语
+    'pt': 'pt',     // 葡萄牙语
+    'ru': 'ru',     // 俄语
+};
+
 
 console.log(`${process.argv}`)
 
-
+// 从 zh_CN 中提取的 源语言 =》 中文的列表
 var zhMap = new Map();
 
 function MysKeyTranslate(config) {
@@ -132,7 +145,6 @@ const TranslateStatus = {
     AlreadyTranslated: 0,
     TranslateFailed: 1,
 };
-let _sourceLanguage;
 
 function getAttributeByName(element, name) {
     const attribute = element.getAttributeNode(name);
@@ -270,23 +282,13 @@ function messageTranslate(contextName, targetLanguage, doc, message, callback) {
         return translateApiCallCount;
     }
 
-    // if (_sourceLanguage === targetLanguage) {
-    //     // No need to call API to translate
-    //     // Qt QTranslator.load fails if qm file was made from an unfinished ts file
-    //     console.warn('*** Warning: src == dst');
-    //     const translatedText = sourceText;
-    //     setTranslatedText(doc, message, translationNode, translatedText);
-    //     callback(null, sourceText);
-    //     return translateApiCallCount;
-    // }
-
     console.log(
-         `translate text '${sourceText}' from ${_sourceLanguage} to '${targetLanguage}'`);
+         `translate text '${sourceText}' from zh_CN to '${targetLanguage}'`);
 
     // fire the google translation
     translateApiCallCount += 1;
 
-    bdtranslate(zhMap.get(contextName + '.' + sourceText), { from: _sourceLanguage, to: targetLanguage })
+    bdtranslate(zhMap.get(contextName + '.' + sourceText), { from: 'zh', to: dst_langs[targetLanguage] })
         .then(function (res) {
             console.log(res);
             
@@ -324,58 +326,76 @@ function messageTranslate(contextName, targetLanguage, doc, message, callback) {
         })
         .catch(err => console.log(`Error on bdtranslate: ${err}`));
 
-    // _googleTranslate.translate(
-    //     sourceText, _sourceLanguage, targetLanguage, function (err, translation) {
-    //         if (err) {
-    //             // console.warn('*** translation error: ', err);
-    //             console.error(`*** Error: google translate from '${_sourceLanguage}' to '${targetLanguage}' failed for: "${sourceText}"`);
-    //             console.error(`*** Error: google translate err: ${err}`);
-    //             callback(TranslateStatus.TranslateFailed, sourceText);
-    //             return translateApiCallCount;
-    //         }
-
-    //         if (!translation) {
-    //             console.error(`*** Error: google translate '${targetLanguage}' failed for: "${sourceText}"`);
-    //             callback(TranslateStatus.TranslateFailed, sourceText);
-    //             return translateApiCallCount;
-    //         }
-
-    //         // Fix Google Translate "%1" to "% 1".
-    //         // Example:
-    //         // Source.......: "Send To:  %1"
-    //         // Translates to: 'Enviar a:% 1'
-    //         // Fix..........: 'Enviar a:%1'
-    //         if (translation.translatedText.indexOf('% ') >= 0) {
-    //             console.log(`dbg Fix Qt args b4 :'${translation.translatedText}'`);
-    //             translation.translatedText = translation.translatedText.replace(/(\%)\s(?=\d)/g, ' $1')
-    //             console.log(`dbg Fix Qt args aft:'${translation.translatedText}'`);
-    //         }
-
-    //         // return the translated text
-    //         console.log(`translated '${sourceText}' to '${translation.translatedText}'`);
-
-    //         if (translationNode === null) {
-    //             translationNode = doc.createElement('translation');
-    //             message.appendChild(translationNode);
-    //             translationNode.setAttribute('type', 'unfinished');
-    //         }
-
-    //         let textNode = translationNode.firstChild;
-    //         if (textNode == null) {
-    //             textNode = doc.createTextNode(translation.translatedText);
-    //             translationNode.appendChild(textNode);
-    //         } else {
-    //             textNode.nodeValue = translation.translatedText;
-    //         }
-
-    //         translationNode.setAttribute('type', 'finished');
-
-    //         callback(null, translation.translatedText);
-    //     });
     return translateApiCallCount;
 }
 
-function translateQtTsFile(zh_ts, ts, from, to) {
+function translateToFile(dstFile, targetLanguage) {
+    console.log('-------------translating ' + dstFile + '------------');
+    fs.readFile(dstFile, 'utf-8', function (err, data) {
+        if (err) {
+            throw err;
+        }
+        const doc = new xmldom().parseFromString(data, 'application/xml');
+        //const tsElement = doc.getElementsByTagName('TS')[0];
+   
+        console.log('targetLanguage:', targetLanguage);
+
+        const promises = [];
+        const contextList = doc.getElementsByTagName('context');
+        for (let i = 0; i < contextList.length; i += 1) {
+            const context = contextList[i];
+            const contextName = getElementText(getElementByName(context, 'name'));
+            const messageList = context.getElementsByTagName('message');
+            for (let j = 0; j < messageList.length; j += 1) {
+                const message = messageList[j];
+                promises.push(new Promise((resolve, reject) => {
+                    // Translate text from message/source message/translation
+                    messageTranslate(
+                        contextName, targetLanguage, doc, message, function (err, translation) {
+                            if (err > 0) {
+                                console.error(`** Error messageTranslate to '${language}' failed err:${err}`);
+                                reject(err);
+                            } else {
+                                resolve();
+                            }
+                        });
+                }));
+                //console.log(message);
+                //break;
+            }
+            //break;
+        }  // end for context
+
+        //Set timeout if a translation fail to complete
+        //promises.push(new Promise((resolve, reject) => setTimeout(() => reject(1), 1 * 60 * 1000)));
+
+        //When all strings are translated, write the translations to file
+        Promise.all(promises)
+            .then(() => {
+                console.log('Promise.all done writing', dstFile);
+                const xml = new XMLSerializer().serializeToString(doc);
+                fs.writeFile(dstFile, xml, function (err) {
+                    if (err) {
+                        // console.log(err);
+                        return console.log(err);
+                    }
+                });
+            })
+            .catch(err => console.log(`*** Error Promise.all writing ${dstFile} \n${err}`));
+    });
+}
+
+function translateQtTsFile(zh_ts, dsts) {
+
+    const pos = zh_ts.indexOf('_');
+    if(pos < 0){
+        console.error('Error parse name from zh ts');
+        return;
+    }
+
+    const projectname = zh_ts.substring(0, pos);
+    //console.log(projectname);
+   // return;
 
     fs.readFile(zh_ts, 'utf-8', function(err, data){
         if (err) {
@@ -423,101 +443,37 @@ function translateQtTsFile(zh_ts, ts, from, to) {
                 console.log(key, '=>', mapObj.get(key));
             });
 
-
-
-            _sourceLanguage = from;
-
-            fs.readFile(ts, 'utf-8', function (err, data) {
-                if (err) {
-                    throw err;
-                }
-                outputFilename = ts;
-                const doc = new xmldom().parseFromString(data, 'application/xml');
-                const tsElement = doc.getElementsByTagName('TS')[0];
-        
-                // language="en_US"
-                // language="es_ES">
-                // language="de_DE">
-                let targetLanguage = getAttributeByName(tsElement, 'language');
-                const pos = targetLanguage.indexOf('_');
-                if (pos > 0) {
-                    targetLanguage = targetLanguage.substring(0, pos);
-                }
-                targetLanguage = to;
-        
-                console.log('targetLanguage:', targetLanguage);
-        
-                const promises = [];
-                const contextList = doc.getElementsByTagName('context');
-                for (let i = 0; i < contextList.length; i += 1) {
-                    const context = contextList[i];
-                    const contextName = getElementText(getElementByName(context, 'name'));
-                    const messageList = context.getElementsByTagName('message');
-                    for (let j = 0; j < messageList.length; j += 1) {
-                        const message = messageList[j];
-                        promises.push(new Promise((resolve, reject) => {
-                            // Translate text from message/source message/translation
-                            messageTranslate(
-                                contextName, targetLanguage, doc, message, function (err, translation) {
-                                    if (err > 0) {
-                                        console.error(`** Error messageTranslate to '${language}' failed err:${err}`);
-                                        reject(err);
-                                    } else {
-                                        resolve();
-                                    }
-                                });
-                        }));
-                        //console.log(message);
-                        //break;
-                    }
-                    //break;
-                }  // end for context
-        
-                //Set timeout if a translation fail to complete
-                //promises.push(new Promise((resolve, reject) => setTimeout(() => reject(1), 1 * 60 * 1000)));
-        
-                //When all strings are translated, write the translations to file
-                Promise.all(promises)
-                    .then(() => {
-                        console.log('Promise.all done');
-                        const xml = new XMLSerializer().serializeToString(doc);
-                        fs.writeFile(outputFilename, xml, function (err) {
-                            if (err) {
-                                // console.log(err);
-                                return console.log(err);
-                            }
-                        });
-                    })
-                    .catch(err => console.log(`*** Error Promise.all writing \n${err}`));
-            });
+        const promises = [];
+        for (const dst of dsts){
+            const dstFile = projectname + "_" + dst + ".ts"; // e.g. helloworld_fr.ts
+            promises.push(new Promise((resolve, reject) => {
+                // Translate text from message/source message/translation
+                translateToFile(dstFile, dst);
+                resolve();
+            }));            
+        }
+        Promise.all(promises);
     });
     
     
 
     return;
 
-    // const pos = ts.lastIndexOf('_');
-    // const filextensionLength = ts.length - pos;
-    // if (pos < 0 || filextensionLength < 6) {
-    //     console.log(
-    //         `*** Errror: Unexpected input file name format: "${inputFileName}"`);
-    //     return;
-    // }
+    
     
 }
 
-
-
-
 program
     .requiredOption('-z, --zhfile <string>', 'zh ts file to be parsed')
-    .requiredOption('-f, --file <string>', 'ts file to be parsed')
-    .option('-s, --src <string>', 'source language, can be language of ts file, or language of ts original(normally its source code language and its en)', 'en')
-    .requiredOption('-d, --dst <string...>', 'destination languages');
+    //.requiredOption('-f, --file <string>', 'ts file to be parsed')
+    //.option('-s, --src <string>', 'source language, can be language of ts file, or language of ts original(normally its source code language and its en)', 'en')
+    .addOption(new Option('-d, --dsts <string...>', 'destination languages')
+                    .choices(Array.from(Object.keys(dst_langs))));
 
 
 program.parse();
 const opts = program.opts();
-console.log(`opts.file=${opts.file}, src=${opts.src}, dst=${opts.dst}`);
-
-translateQtTsFile(opts.zhfile, opts.file, opts.src, opts.dst);
+//console.log(`opts.file=${opts.file}, src=${opts.src}, dst=${opts.dst}`);
+//console.log(dst_langs['ar']);
+//return;
+translateQtTsFile(opts.zhfile, opts.dsts);
